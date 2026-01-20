@@ -8,10 +8,13 @@ import (
 	"vox-nlu/rasa"
 )
 
+var Version = "dev"
+
 func main() {
-	rabbitURL := os.Getenv("RABBITMQ_URL")
+	log.Println("Vox NLU version:", Version)
+	rabbitURL := os.Getenv("RABBIT_URL")
 	if rabbitURL == "" {
-		log.Fatal("RABBITMQ_URL not set")
+		log.Fatal("RABBIT_URL not set")
 	}
 
 	// Инициализируем хранилище интентов
