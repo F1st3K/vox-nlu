@@ -1,33 +1,40 @@
 package rabbit
 
 import (
+	"context"
+	"encoding/json"
 	"log"
 
 	"github.com/streadway/amqp"
 )
 
-type Event struct {
-	Event string
-	Data  map[string]interface{}
+type Consumer[T any] struct {
+	url        string
+	exchange   string
+	queue      string
+	routingKey string
+	handler    func(T)
+
+	conn *amqp.Connection
+	ch   *amqp.Channel
 }
 
-type Consumer struct {
-	url     string
-	handler func(Event)
-	conn    *amqp.Connection
-	ch      *amqp.Channel
-	queue   string
-}
-
-func NewConsumer(url string, handler func(Event)) *Consumer {
-	return &Consumer{
-		url:     url,
-		handler: handler,
-		queue:   "nlu.commands",
+func NewConsumer[T any](
+	url string,
+	queue string,
+	routingKey string,
+	handler func(T),
+) *Consumer[T] {
+	return &Consumer[T]{
+		url:        url,
+		exchange:   "intents",
+		queue:      queue,
+		routingKey: routingKey,
+		handler:    handler,
 	}
 }
 
-func (c *Consumer) Start() error {
+func (c *Consumer[T]) Start(ctx context.Context) error {
 	conn, err := amqp.Dial(c.url)
 	if err != nil {
 		return err
@@ -40,6 +47,21 @@ func (c *Consumer) Start() error {
 	}
 	c.ch = ch
 
+	// exchange
+	err = ch.ExchangeDeclare(
+		c.exchange,
+		"topic",
+		true,
+		false,
+		false,
+		false,
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+
+	// queue
 	q, err := ch.QueueDeclare(
 		c.queue,
 		true,
@@ -52,10 +74,22 @@ func (c *Consumer) Start() error {
 		return err
 	}
 
+	// bind
+	err = ch.QueueBind(
+		q.Name,
+		c.routingKey,
+		c.exchange,
+		false,
+		nil,
+	)
+	if err != nil {
+		return err
+	}
+
 	msgs, err := ch.Consume(
 		q.Name,
 		"",
-		true,
+		false, // manual ack
 		false,
 		false,
 		false,
@@ -65,14 +99,36 @@ func (c *Consumer) Start() error {
 		return err
 	}
 
-	forever := make(chan bool)
+	log.Printf(
+		"Consumer started: queue=%s routing=%s",
+		c.queue,
+		c.routingKey,
+	)
+
 	go func() {
-		for d := range msgs {
-			// TODO: unmarshal JSON into Event
-			log.Printf("Received message: %s", d.Body)
+		for {
+			select {
+			case d, ok := <-msgs:
+				if !ok {
+					return
+				}
+				var e T
+				if err := json.Unmarshal(d.Body, &e); err != nil {
+					log.Printf("unmarshal error: %v", err)
+					d.Nack(false, false)
+					continue
+				}
+				c.handler(e)
+				d.Ack(false)
+
+			case <-ctx.Done():
+				_ = c.ch.Close()
+				_ = c.conn.Close()
+				return
+			}
 		}
 	}()
-	log.Println("Waiting for messages...")
-	<-forever
+
+	<-ctx.Done()
 	return nil
 }

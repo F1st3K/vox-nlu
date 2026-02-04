@@ -14,9 +14,9 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
 # -------- Stage 2: runtime --------
 FROM rasa/rasa:main-full
 
+USER root
 WORKDIR /app
 
 COPY --from=builder /app/vox-nlu ./
-COPY config/ config/
 
 ENTRYPOINT ["./vox-nlu"]
