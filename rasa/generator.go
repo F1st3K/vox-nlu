@@ -8,7 +8,7 @@ import (
 	"regexp"
 )
 
-func GenerateNLU(intents []Intent, path string) (bool, error) {
+func GenerateNLU(intents []TrainIntents, path string) (bool, error) {
 	nluFile, err := os.CreateTemp(path, "nlu-*.yml")
 	if err != nil {
 		return false, err
@@ -88,15 +88,15 @@ func GenerateDefaultConf(path string) error {
 
 pipeline:
   - name: WhitespaceTokenizer
-  - name: RegexFeaturizer
-  - name: LexicalSyntacticFeaturizer
+
   - name: CountVectorsFeaturizer
-  - name: CountVectorsFeaturizer
-    analyzer: char_wb
-    min_ngram: 1
-    max_ngram: 4
+
   - name: DIETClassifier
     epochs: 100
+    constrain_similarities: True  # полезно для cross-entropy loss, убирает warning
+    intent_classification: True
+    entity_recognition: True
+
   - name: EntitySynonymMapper
 
 policies: []

@@ -19,4 +19,5 @@ WORKDIR /app
 
 COPY --from=builder /app/vox-nlu ./
 
+RUN rasa telemetry disable
 ENTRYPOINT ["./vox-nlu"]

@@ -9,24 +9,23 @@ import (
 )
 
 type Consumer[T any] struct {
-	url        string
 	exchange   string
 	queue      string
 	routingKey string
-	handler    func(T)
+	handler    func(T, amqp.Delivery) bool
 
 	conn *amqp.Connection
 	ch   *amqp.Channel
 }
 
 func NewConsumer[T any](
-	url string,
+	conn *amqp.Connection,
 	queue string,
 	routingKey string,
-	handler func(T),
+	handler func(T, amqp.Delivery) bool,
 ) *Consumer[T] {
 	return &Consumer[T]{
-		url:        url,
+		conn:       conn,
 		exchange:   "intents",
 		queue:      queue,
 		routingKey: routingKey,
@@ -35,13 +34,7 @@ func NewConsumer[T any](
 }
 
 func (c *Consumer[T]) Start(ctx context.Context) error {
-	conn, err := amqp.Dial(c.url)
-	if err != nil {
-		return err
-	}
-	c.conn = conn
-
-	ch, err := conn.Channel()
+	ch, err := c.conn.Channel()
 	if err != nil {
 		return err
 	}
@@ -118,7 +111,10 @@ func (c *Consumer[T]) Start(ctx context.Context) error {
 					d.Nack(false, false)
 					continue
 				}
-				c.handler(e)
+				if res := c.handler(e, d); res == false {
+					d.Nack(false, false)
+					continue
+				}
 				d.Ack(false)
 
 			case <-ctx.Done():
