@@ -12,12 +12,12 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=${TARGETARCH} \
     go build -ldflags="-X 'main.Version=$(cat VERSION)'" -o vox-nlu main.go
 
 # -------- Stage 2: runtime --------
-FROM rasa/rasa:main-full
+FROM python:3.10.12-slim
 
-USER root
 WORKDIR /app
-
 COPY --from=builder /app/vox-nlu ./
 
-RUN rasa telemetry disable
+RUN pip install --no-cache-dir rasa==3.7.0b2 \
+ && rasa telemetry disable
+
 ENTRYPOINT ["./vox-nlu"]
